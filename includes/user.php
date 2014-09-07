@@ -91,7 +91,6 @@
 				if($results[0]['expire'] > epochToTiddlyTime(time())) 
 				{
 					if($tiddlyCfg['pref']['renew_session_on_each_request']==1)
-						$un = user_getUsername();
 						user_reset_session($un, $pw);
 					return TRUE;
 				}
@@ -118,13 +117,12 @@
 	function user_set_session($un, $pw)
 	{
 		global $tiddlyCfg;
-		if(isset($ccT_msg['debug']['setSession']))
-			debug($ccT_msg['debug']['setSession'], "login");
+		debug($ccT_msg['debug']['setSession'], "login");
 		if ($tiddlyCfg['users_required_in_db']==1)
 		{
 			debug($ccT_msg['debug']['userRequiredInDb'], "login");
 		 	$data['username'] = $un;
-			$login_check = db_record_select($tiddlyCfg['table']['user'], $data);			// get array of results		
+			$login_check = db_record_select($tiddlyCfg['table']['prefix'].'user', $data);			// get array of results		
 		
 			if (count($login_check) > 0 ) 
 			{
@@ -142,20 +140,19 @@
 		// create a date far in the future if session timeout is set to 0
 		$a = time();
 		$total = $a+$tiddlyCfg['session_expire'];	
-		$insert_data['expire'] = epochToTiddlyTime($total); // add expire time to data array for insert	
-		if(isset($ccT_msg['debug']['sessionWillExpire']))
-			debug($ccT_msg['debug']['sessionWillExpire'].$insert_data['expire'], "login");	
+		$insert_data['expire'] = epochToTiddlyTime($total); // add expire time to data array for insert		
+		debug($ccT_msg['debug']['sessionWillExpire'].$insert_data['expire'], "login");	
 		$insert_data['ip'] = $_SERVER['REMOTE_ADDR'];  // get the ip address
 		$insert_data['session_token'] = sha1($un.$_SERVER['REMOTE_ADDR'].$expire); // colect data together and sh1 it so that we have a unique indentifier 
 		if ($tiddlyCfg['pref']['delete_other_sessions_on_login']) {
 			$del_data['user_id'] =$un;
 			db_record_delete('login_session',$del_data);
 		}
-		cookie_set('sessionToken', $insert_data['session_token']);
+		cookie_set('txtUserName', $un);
+ 		cookie_set('sessionToken', $insert_data['session_token']);
 		$rs = db_record_insert('login_session',$insert_data);
 		if ($rs){
-			if(isset($ccT_msg['debug']['sessionAddedToDb']))
-				debug($ccT_msg['debug']['sessionAddedToDb'], "login");
+			debug($ccT_msg['debug']['sessionAddedToDb'], "login");
 			return $insert_data['session_token'];
 		}	
 	}		
@@ -171,22 +168,20 @@
 		debug("validating the session with Username/pass:  ".$un, "steps");
 			
 		// session has not been created, lets try the user/pass on our ldap server. 
-		if(isset($tiddlyCfg['pref']['ldap_enabled']))
+		if ($tiddlyCfg['pref']['ldap_enabled']==1)
 		{
-			if ($tiddlyCfg['pref']['ldap_enabled']==1)
+			if (user_ldap_login($un, $pw))	
 			{
-				if (user_ldap_login($un, $pw))	
-				{
-					return TRUE;
-				}
+				return TRUE;
 			}
-		}
+		}		
 		
 		if ($un != '' && $pw != '')
 		{
 			$data['username'] = $un;
 			$data['password'] = $pw;
-			$results = db_record_select($tiddlyCfg['table']['prefix'].$tiddlyCfg['table']['user'], $data);			// get array of results		
+			//$results = db_record_select($tiddlyCfg['table']['prefix'].$tiddlyCfg['table']['user'], $data);			// get array of results		
+			$results = db_record_select($tiddlyCfg['table']['prefix'].'user', $data);			// get array of results		
 			if (count($results) > 0 )                   //  if the array has 1 or more acounts 
 			{
 				$del_data1['expire'] = epochToTiddlyTime(time());
@@ -233,20 +228,12 @@
 	//!	@brief get username from cookie
 	function user_getUsername()
 	{
-		$t = cookie_get('TiddlyWiki');
-		if($t)
+		$u = cookie_get('txtUserName');
+		if( strlen($u)==0 )
 		{
-			$userGrab = strpos($t, "txtUserName")+13;
-			$userEnd = strpos($t, '"', $userGrab)-$userGrab;
-			$u = substr($t, $userGrab, $userEnd);
-			if( strlen($u)==0 )
-			{
-				return "YourName";
-			}
-			return $u;
-		} else {
 			return "YourName";
 		}
+		return $u;
 	}
 	
 	function user_logout($errorMsg = null)
